@@ -1,0 +1,38 @@
+version: '3.7'  # Specifies the version of the Docker Compose file format
+
+services:
+  # Docker-in-Docker (dind) service configuration
+  dind:
+    image: docker:dind  # Uses the Docker-in-Docker image which allows Jenkins to build and run Docker containers
+    user: root  # Runs the container as the root user for administrative privileges
+    privileged: true  # Grants extended privileges to this container to perform Docker operations inside Docker
+    container_name: dind  # Specifies the container name for easy identification
+    expose:
+      - 2375  # Exposes port 2375 for Docker client to communicate with the Docker daemon (non-TLS)
+    networks:
+      - jenkins_dind  # Connects the container to the jenkins_dind network for internal communication between services
+    environment:
+      DOCKER_TLS_CERTDIR: ""  # Disables TLS certification as we are using non-TLS communication between Jenkins and Docker daemon
+
+  # Jenkins service configuration
+  jenkins:
+    image: jenkins/jenkins:lts  # Uses the Jenkins LTS (Long Term Support) image for stability
+    user: root  # Runs the Jenkins container as root to access Docker from within Jenkins
+    container_name: jenkins  # Specifies the container name for the Jenkins service
+    depends_on:
+      - dind  # Ensures that the dind service is started before Jenkins
+    ports:
+      - 8080:8080  # Maps port 8080 on the host to port 8080 on the Jenkins container for web UI access
+      - 50000:50000  # Maps port 50000 on the host to port 50000 on the Jenkins container for agent communication
+    volumes:
+      - ./jenkins:/var/jenkins_home  # Binds a local directory to the Jenkins home directory to persist Jenkins data
+      - /usr/bin/docker:/usr/bin/docker  # Mounts the Docker binary from the host to enable Jenkins to execute Docker commands
+    environment:
+      DOCKER_HOST: "tcp://dind:2375"  # Sets the Docker host environment variable to communicate with the dind service via TCP
+    networks:
+      - jenkins_dind  # Connects the Jenkins service to the jenkins_dind network
+
+# Defines the custom network for internal communication between Jenkins and dind services
+networks:
+  jenkins_dind:
+    driver: bridge  # Uses the bridge network driver for service-to-service communication
